@@ -24,7 +24,7 @@ struct PreservedColorStruct {
     u32 sizeB : 8;
 };
 
-extern struct PreservedColorStruct g_preservation_buffer[8];
+struct PreservedColorStruct g_preservation_buffer[8] EWRAM_BSS;
 
 uint16_t s_pltt_buffer[512] EWRAM_BSS;
 

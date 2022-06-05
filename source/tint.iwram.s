@@ -1,11 +1,12 @@
 .arm
 .global TintPalettesFast
-.global g_preservation_buffer
 .extern s_pltt_buffer
+.extern g_preservation_buffer
 .align 2
 
 .equ IO_BASE, 0x04000000
 .equ REG_DMA3SAD, 0xD4
+.equ PRAM, 0x05000000
 
 
 @ Uses a MUL instruction to ColorMultiply 2 components
@@ -30,28 +31,28 @@
 @ void TintPalettes(uint16_t mulColor, uint32_t bitmask)
 TintPalettesFast:
     .word 0xe3104778
-    push {r4-r12, lr}
+    push { r4-r12, lr }
 
 @ Buffer SP so we can use it as GP register
     adr r2, sp_buffer
     str sp, [r2]
 
 @ Calculate Bitmask 0x001F001F
-    mov r9, #0x1F
-    orr r9, r9, r9, lsl #16
+    mov r2, #0x1F
+    orr r2, r2, r2, lsl #16
 
 @ Green Parameter
-    and r4, r9, r0, lsr #5
+    and r3, r2, r0, lsr #5
 
 @ Blue Parameter
-    and lr, r9, r0, lsr #10
+    and r4, r2, r0, lsr #10
 
 @ Red Parameter
     and r0, r0, #0x1F
 
 @ Base Addresses
-    ldr r11, =s_pltt_buffer
-    ldr r12, =0x05000000 @PRAM
+    ldr r5, =s_pltt_buffer
+    mov r6, #PRAM
 
 tint_loop:
     lsrs r1, #1
@@ -59,48 +60,34 @@ tint_loop:
     beq tail_copy
 
 @ If the palette is masked, issue blank copy operation
-@ NOTE: Possible optimization if registers are renamed: Use only one ldm/stm pair.
-    ldmia r11!, {r5-r8}
-    stmia r12!, {r5-r8}
-    ldmia r11!, {r5-r8}
-    stmia r12!, {r5-r8}
+    ldmia r5!, { r7-r14 }
+    stmia r6!, { r7-r14 }
     b tint_loop
 tint_inner:
-    ldmia r11!, {r5-r8}
-    tint_single_word r5, r9, r0, r4, lr, r3, r2, sp
-    tint_single_word r6, r9, r0, r4, lr, r3, r2, sp
-    tint_single_word r7, r9, r0, r4, lr, r3, r2, sp
-    tint_single_word r8, r9, r0, r4, lr, r3, r2, sp
-    stmia r12!, {r5-r8}
-    tst r12, #0x10
+    ldmia r5!, { r7-r10 }
+    tint_single_word r7, r2, r0, r3, r4, r11, r12, lr
+    tint_single_word r8, r2, r0, r3, r4, r11, r12, lr
+    tint_single_word r9, r2, r0, r3, r4, r11, r12, lr
+    tint_single_word r10, r2, r0, r3, r4, r11, r12, lr
+    stmia r6!, { r7-r10 }
+    tst r6, #0x10
     bne tint_inner
     b tint_loop
 tail_copy:
 
     mov r3, #IO_BASE
     orr r3, #REG_DMA3SAD
-    sub r10, r12, #0x05000000
+    sub r10, r6, #PRAM
     rsb r10, r10, #0x400
-    mov sp, #0x84000000
-    orr sp, sp, r10, lsr #2
-    stmia r3, {r11-sp}
-
-/*  size/offset in palette entries
-    struct PreservedColorStruct {
-        u32 offsetA : 8;
-        u32 sizeA : 8;
-        u32 offsetB : 8;
-        u32 sizeB : 8;
-    };
-*/
+    mov r7, #0x84000000
+    orr r7, r7, r10, lsr #2
+    stmia r3, {r5-r7}
 
 color_preservation:
-    adr r0, g_preservation_buffer
-
-@ NOTE: Maybe restore these values from the previous iterations if possible to save one load
+    ldr r0, =g_preservation_buffer
     mov r5, #0x80000000
     ldr r6, =s_pltt_buffer
-    mov r7, #0x05000000
+    mov r7, #PRAM
 
 preservation_loop:
     ldmia r0!, {r1}
@@ -111,7 +98,7 @@ preservation_loop:
     add r10, r6, r2, lsl #1
     add r11, r7, r2, lsl #1
     orr r12, r5, r7, lsr #8
-    stmia r8, {r10-r12}
+    stmia r8, { r10-r12 }
     ands r2, r1, #0xFF0000
     beq return
     and r7, r1, #0xFF000000
@@ -119,16 +106,13 @@ preservation_loop:
     add r11, r7, r2, lsr #15
     orr r12, r5, r7, lsr #24
     
-    stmia r3, {r10-r12}
+    stmia r3, { r10-r12 }
     b preservation_loop
 return:
     adr r2, sp_buffer
     ldr sp, [r2]
-    pop {r4-r12, lr}
+    pop { r4-r12, lr }
     bx lr
 
 sp_buffer:
     .word 0
-
-g_preservation_buffer:
-    .space 32
