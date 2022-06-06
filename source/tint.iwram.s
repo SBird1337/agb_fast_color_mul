@@ -1,5 +1,5 @@
 .arm
-.global TintPalettesFast
+.global MutateAndColorMultiply
 .extern s_pltt_buffer
 .extern g_preservation_buffer
 .align 2
@@ -10,26 +10,35 @@
 
 
 @ Uses a MUL instruction to ColorMultiply 2 components
-@ Needs a mul_tmp_reg to store the result in order to not clobber the result register
-@ TODO: Check if this is really a problem on real HW
+@ Needs a mul_tmp_reg to store the result in order to not corrupt the result register
 .macro tint_single_word word_reg:req, mask_reg:req, red_reg:req, green_reg:req, blue_reg:req, tmp_reg:req, tmp_out_reg:req, mul_tmp_reg:req
+
+@ Red Component
     and \tmp_reg, \mask_reg, \word_reg
     mul \mul_tmp_reg, \tmp_reg, \red_reg
     and \tmp_out_reg, \mask_reg, \mul_tmp_reg, lsr #5
 
+@ Blue Component
     and \tmp_reg, \mask_reg, \word_reg, lsr #5
     mul \mul_tmp_reg, \tmp_reg, \green_reg
     and \tmp_reg, \mask_reg, \mul_tmp_reg, lsr #5
     orr \tmp_out_reg, \tmp_out_reg, \tmp_reg, lsl #5
 
+@ Green Component
     and \tmp_reg, \mask_reg, \word_reg, lsr #10
     mul \mul_tmp_reg, \tmp_reg, \blue_reg
     and \tmp_reg, \mask_reg, \mul_tmp_reg, lsr #5
+
+@ Writeback
     orr \word_reg, \tmp_out_reg, \tmp_reg, lsl #10
 .endm
 
-@ void TintPalettes(uint16_t mulColor, uint32_t bitmask)
-TintPalettesFast:
+@ void MutateAndColorMultiply (u16 color, u32 mask)
+MutateAndColorMultiply:
+
+@ Valid ARM instruction (tst)
+@ Valid THUMB instruction (bx pc)
+@ Switches the CPU to ARM mode for interworking
     .word 0xe3104778
     push { r4-r12, lr }
 
@@ -55,26 +64,33 @@ TintPalettesFast:
     mov r6, #PRAM
 
 tint_loop:
+
+@ If the mask parameter has no more bits we can `tail_copy` the remaining colors
     lsrs r1, #1
     bcs tint_inner
     beq tail_copy
 
-@ If the palette is masked, issue blank copy operation
+@ Palette is masked (C == 1), issue blank copy operation
     ldmia r5!, { r7-r14 }
     stmia r6!, { r7-r14 }
     b tint_loop
 tint_inner:
+
+@ Tint half of a palette using r7-r10
     ldmia r5!, { r7-r10 }
     tint_single_word r7, r2, r0, r3, r4, r11, r12, lr
     tint_single_word r8, r2, r0, r3, r4, r11, r12, lr
     tint_single_word r9, r2, r0, r3, r4, r11, r12, lr
     tint_single_word r10, r2, r0, r3, r4, r11, r12, lr
     stmia r6!, { r7-r10 }
+
+@ Check if we are in the middle of a palette and tint the other half if necessary
     tst r6, #0x10
     bne tint_inner
     b tint_loop
 tail_copy:
 
+@ Copy The rest of the colors using DMA 3
     mov r3, #IO_BASE
     orr r3, #REG_DMA3SAD
     sub r10, r6, #PRAM
@@ -83,6 +99,7 @@ tail_copy:
     orr r7, r7, r10, lsr #2
     stmia r3, {r5-r7}
 
+@ Re-Copy "preserved" color slots (set `struct PreservedColorStruct`)
 color_preservation:
     ldr r0, =g_preservation_buffer
     mov r5, #0x80000000

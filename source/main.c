@@ -10,7 +10,7 @@
 
 #include "data.h"
 
-extern void TintPalettesFast(u32 tintColor, u32 mask);
+extern void MutateAndColorMultiply(u32 tintColor, u32 mask);
 
 extern u16 g_color_lut[1440];
 
@@ -32,7 +32,7 @@ static inline void CallTintPalettesFast(u32 tintColor, u32 mask)
 {
     register int _color asm("r0") = tintColor;
     register int _mask asm("r1") = mask;
-    asm ("mov\tlr, %2\n\t.2byte\t0xF800" :: "l" (_color), "l" (_mask), "l" (TintPalettesFast) : "lr");
+    asm ("mov\tlr, %2\n\t.2byte\t0xF800" :: "l" (_color), "l" (_mask), "l" (MutateAndColorMultiply) : "lr");
 }
 
 //---------------------------------------------------------------------------------

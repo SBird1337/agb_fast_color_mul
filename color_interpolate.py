@@ -20,7 +20,7 @@ def generateFade(c1,c2, hours):
     colors = []
     n = hours * COLORS_PER_HOUR
     for x in range(n):
-        color = colorFader(c1,c2, x/n)
+        color = colorFader(c1,c2, x / n)
         r = color[1:3]
         g = color[3:5]
         b = color[5:7]
