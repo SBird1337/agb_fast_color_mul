@@ -42,10 +42,6 @@ MutateAndColorMultiply:
     .word 0xe3104778
     push { r4-r12, lr }
 
-@ Buffer SP so we can use it as GP register
-    adr r2, sp_buffer
-    str sp, [r2]
-
 @ Calculate Bitmask 0x001F001F
     mov r2, #0x1F
     orr r2, r2, r2, lsl #16
@@ -71,8 +67,10 @@ tint_loop:
     beq tail_copy
 
 @ Palette is masked (C == 1), issue blank copy operation
-    ldmia r5!, { r7-r14 }
-    stmia r6!, { r7-r14 }
+    ldmia r5!, { r7-r10 }
+    stmia r6!, { r7-r10 }
+    ldmia r5!, { r7-r10 }
+    stmia r6!, { r7-r10 }
     b tint_loop
 tint_inner:
 
@@ -126,10 +124,5 @@ preservation_loop:
     stmia r3, { r10-r12 }
     b preservation_loop
 return:
-    adr r2, sp_buffer
-    ldr sp, [r2]
     pop { r4-r12, lr }
     bx lr
-
-sp_buffer:
-    .word 0
